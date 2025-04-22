@@ -160,7 +160,7 @@ def define_rois(capture_source_path):
     polygons = []
     current_points = []
 
-    cv2.namedWindow(WINDOW_NAME_DEFINE)
+    cv2.namedWindow(WINDOW_NAME_DEFINE, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(WINDOW_NAME_DEFINE, _draw_polygon_callback) # Use internal callback
 
     print("INSTRUCTIONS:")

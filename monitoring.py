@@ -46,7 +46,7 @@ class UnattendedMonitorDetector:
         # Tunable parameters (consider moving to a config file or args)
         self.brightness_threshold = 94
         self.std_dev_threshold = 67
-        self.proximity_radius_multiplier = 0.2
+        self.proximity_radius_multiplier = 0.5
         self.monitor_radius_multiplier = 0.1
 
     def detect_objects(self, frame):

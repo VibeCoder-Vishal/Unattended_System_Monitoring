@@ -1,9 +1,13 @@
-# config.py
+DEFINE_ROI = False 
 
-# Set to True to run the ROI definition process on the next run.
-# Set to False to use the existing ROI_ZONES and skip definition.
-DEFINE_ROI = False # Set to False after defining ROIs
+ROI_ZONES = [[(284, 257), (478, 194), (577, 245), (320, 334)], [(512, 187), (686, 139), (821, 181), (587, 235)], [(326, 339), (502, 279), (547, 410), (390, 482)], [(787, 335), (1044, 252), (1386, 400), (1119, 550)], [(399, 485), (773, 345), (1104, 565), (617, 837)]]
 
-# List to store the coordinates of the polygonal ROI zones.
-# Each zone is a list of (x, y) tuples.
-ROI_ZONES = [[(466, 99), (749, 19), (923, 163), (434, 297)], [(1151, 28), (1373, 15), (1623, 134), (1396, 178)], [(820, 70), (1132, 20), (1362, 171), (940, 166)], [(445, 707), (1239, 460), (1652, 959), (558, 983)]]
+# --- Prohance Specific Thresholds ---
+# Max duration (seconds) for an interaction to be flagged as potential manipulation.
+SHORT_INTERACTION_THRESHOLD_SEC = 10
+
+# Min duration (seconds) for a foreign user's presence to be considered "sustained" occupancy.
+SUSTAINED_PRESENCE_THRESHOLD_SEC = 60
+
+# Period after flagging manipulation during which new flags for the same ROI are suppressed.
+MANIPULATION_COOLDOWN_SEC = 30
