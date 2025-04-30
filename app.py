@@ -1,5 +1,3 @@
-# app.py (Complete Modified Version)
-
 import cv2
 import numpy as np
 import argparse
@@ -17,7 +15,6 @@ except ImportError as e:
     print("Please ensure monitoring.py and polygon.py are in the correct directory.")
     sys.exit(1)
 
-
 # --- Application Constants ---
 WINDOW_NAME_VIEW = "Unattended Monitor Detection (ROI Filtered)"
 # Colors specified by user in the prompt:
@@ -32,12 +29,10 @@ THICKNESS = 2
 def filter_detections_by_roi(all_monitors, all_persons, rois_np_list):
     """
     Filters detections and groups them by the ROI they fall into.
-
     Args:
         all_monitors (list): List of all detected monitor boxes.
-        all_persons (list): List of all detected person boxes.
+        all_persons (list): List of all detected person boxes (may include track_id).
         rois_np_list (list): List of ROI polygons as NumPy arrays, or None/empty.
-
     Returns:
         tuple: (monitors_by_roi, persons_by_roi)
                Dictionaries mapping ROI index to list of objects within it.
@@ -45,7 +40,6 @@ def filter_detections_by_roi(all_monitors, all_persons, rois_np_list):
     """
     monitors_by_roi = {}
     persons_by_roi = {}
-
     if not rois_np_list: # Handle case with no ROIs
         # If no ROIs, we could treat the whole frame as one ROI,
         # but for clarity, let's return empty dicts and handle downstream.
@@ -53,16 +47,14 @@ def filter_detections_by_roi(all_monitors, all_persons, rois_np_list):
         # Let's keep it simple: if no ROIs, filtering results in nothing *grouped by ROI*.
         # The calling function (process_video) will need to handle this.
         return monitors_by_roi, persons_by_roi
-
     # Initialize dictionaries with empty lists for each ROI index
     for i in range(len(rois_np_list)):
         monitors_by_roi[i] = []
         persons_by_roi[i] = []
-
     # Filter monitors and assign to the correct ROI index
     for m_box in all_monitors:
         # Use center point for checking containment
-        x1, y1, x2, y2, _ = m_box
+        x1, y1, x2, y2, *_ = m_box
         center_x = (x1 + x2) / 2
         center_y = (y1 + y2) / 2
         for i, roi in enumerate(rois_np_list):
@@ -70,18 +62,16 @@ def filter_detections_by_roi(all_monitors, all_persons, rois_np_list):
             if cv2.pointPolygonTest(roi, (int(center_x), int(center_y)), False) >= 0:
                 monitors_by_roi[i].append(m_box)
                 break # Found in one ROI, stop checking others for this monitor
-
     # Filter persons and assign to the correct ROI index
     for p_box in all_persons:
         # Use center point for checking containment
-        x1, y1, x2, y2, _ = p_box
+        x1, y1, x2, y2, *rest = p_box  # Preserve tracking ID if available
         center_x = (x1 + x2) / 2
         center_y = (y1 + y2) / 2
         for i, roi in enumerate(rois_np_list):
             if cv2.pointPolygonTest(roi, (int(center_x), int(center_y)), False) >= 0:
                 persons_by_roi[i].append(p_box)
                 break # Found in one ROI, stop checking others for this person
-
     return monitors_by_roi, persons_by_roi
 
 
@@ -89,7 +79,6 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
     """
     Processes the video: reads frames, detects objects, filters by ROI,
     determines monitor status/attendance, annotates, and saves/shows output.
-
     Args:
         input_path (str): Path to the input video.
         output_path (str): Path to save the output video.
@@ -99,27 +88,22 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
     """
     if not os.path.isfile(input_path):
         raise FileNotFoundError(f"Input video file not found: {input_path}")
-
     output_dir = os.path.dirname(output_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         raise IOError(f"Failed to open video file: {input_path}")
-
     # Get video properties
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
     # Validate FPS and calculate wait time
     if fps <= 0:
         print(f"Warning: Invalid FPS ({fps}) detected from video. Defaulting to 25 FPS.")
         fps = 25.0 # Use a float for potentially more accurate writer init
     wait_time = int(1000 / fps) if fps > 0 else 40 # Default to 40ms (25fps) if calculation fails
-
     # Initialize video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Standard MP4 codec
     try:
@@ -128,8 +112,6 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
              raise IOError(f"Failed to open VideoWriter for output file: {output_path}")
     except Exception as e:
          raise IOError(f"Failed to initialize VideoWriter: {e}")
-
-
     # Initialize the detector using args for customization
     try:
         detector = UnattendedMonitorDetector(
@@ -141,13 +123,11 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
          cap.release() # Release capture if detector fails
          out.release() # Release writer
          raise # Re-raise the exception
-
     # Statistics tracking
     frame_count = 0
     unattended_event_frames = 0 # Frames where at least one monitor was unattended
     max_unattended_in_frame = 0 # Max number of unattended monitors in a single frame
     processing_times = []
-
     print(f"\n--- Processing Video ---")
     print(f"Input : {input_path}")
     print(f"Output: {output_path}")
@@ -159,30 +139,24 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
     else:
         print("ROIs Active: No (Processing full frame)")
     print("------------------------")
-
     try:
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 #print("\nEnd of video or cannot read frame.") # Reduce verbosity
                 break
-
             frame_count += 1
             start_time = time.time()
             annotated_frame = frame.copy() # Work on a copy for annotations
-
             # --- ROI Handling ---
             has_rois = bool(final_rois_np) # True if ROIs are defined and loaded
-
             # 1. Draw defined ROIs onto the frame first (OPTIONAL)
             #    This line is commented out as per previous request
             # if has_rois:
             #     # cv2.polylines(annotated_frame, final_rois_np, isClosed=True, color=ROI_DRAW_COLOR, thickness=THICKNESS)
             #     pass
-
             # 2. Detect all objects in the frame
             all_monitors, all_persons = detector.detect_objects(frame) # Use original frame for detection
-
             # 3. Filter detections based on ROIs (if ROIs exist)
             monitors_by_roi = {}
             persons_by_roi = {}
@@ -197,29 +171,23 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
                 # If no ROIs, treat all detected objects as relevant
                 monitors_in_any_roi = all_monitors
                 persons_in_any_roi = all_persons
-
             # 4. Process monitors ROI by ROI (if ROIs exist) or all monitors (if no ROIs)
             unattended_this_frame = [] # List to store boxes of unattended monitors in this frame
             total_monitors_processed = 0
             total_persons_processed = len(persons_in_any_roi) # Count persons once
-
             if has_rois:
                 # Iterate through each ROI index that had monitors
                 for roi_index in monitors_by_roi:
                     monitors_in_this_roi = monitors_by_roi[roi_index]
                     persons_in_this_roi = persons_by_roi.get(roi_index, []) # Persons in this specific ROI
-
                     total_monitors_processed += len(monitors_in_this_roi)
-
                     # Process each monitor found specifically in this ROI
                     for monitor_box in monitors_in_this_roi:
-                        x1, y1, x2, y2, _ = monitor_box
+                        x1, y1, x2, y2, *_ = monitor_box
                         is_on = detector.is_monitor_on(frame, monitor_box)
-
                         if is_on:
                             # Check proximity using ONLY persons from the SAME ROI
                             is_attended = detector.check_person_proximity(monitor_box, persons_in_this_roi)
-
                             if not is_attended:
                                 unattended_this_frame.append(monitor_box)
                                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), UNATTENDED_ON_COLOR, THICKNESS)
@@ -236,7 +204,7 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
                 # No ROIs - process all detected monitors
                 total_monitors_processed = len(all_monitors)
                 for monitor_box in all_monitors:
-                    x1, y1, x2, y2, _ = monitor_box
+                    x1, y1, x2, y2, *_ = monitor_box
                     is_on = detector.is_monitor_on(frame, monitor_box)
                     if is_on:
                         # Check proximity using ALL detected persons if no ROIs
@@ -252,16 +220,25 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
                         unattended_this_frame.append(monitor_box)
                         cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), UNATTENDED_OFF_COLOR, THICKNESS)
                         cv2.putText(annotated_frame, "Unattended(Off)", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, UNATTENDED_OFF_COLOR, THICKNESS)
-
-
             # 5. Draw boxes for ALL persons found within ANY ROI (or all persons if no ROIs)
             #    Use set to handle potential duplicates if ROIs overlap and a person is in multiple
             unique_persons_to_draw = {tuple(p_box[:4]): p_box for p_box in persons_in_any_roi} # Use coords as key
             for p_box in unique_persons_to_draw.values():
-                 px1, py1, px2, py2, _ = p_box
-                 cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), PERSON_COLOR, THICKNESS)
-
-
+                # Check if we have tracking ID (6th element) in the p_box
+                px1, py1, px2, py2 = p_box[:4]
+                
+                # Draw person bounding box
+                cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), PERSON_COLOR, THICKNESS)
+                
+                # Add tracking ID label if available (should be the 6th element if present)
+                if len(p_box) >= 6:
+                    track_id = p_box[5]  # Get the tracking ID
+                    # Format: "ProHance: Person ID"
+                    label_text = f"ProHance: Person {track_id}"
+                    # Position the label at the top of the bounding box
+                    cv2.putText(annotated_frame, label_text, (px1, py1 - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, PERSON_COLOR, THICKNESS)
+            
             # 6. Update statistics based on this frame's results
             # if unattended_this_frame:
             #     unattended_event_frames += 1
@@ -269,7 +246,6 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
             unattended_on_count = sum(
                 1 for box in unattended_this_frame if detector.is_monitor_on(frame, box)
             )
-
             # 7. Add statistics overlay
             #    Counts reflect objects processed (either all or within ROIs)
             # stats_text = f"Unattended Systems: {len(unattended_this_frame)}"
@@ -278,28 +254,23 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
                  stats_text += "" # Indicate stats are ROI-based
             # Add background rectangle for better visibility
             try: # Wrap text drawing in try-except for robustness
-                (w, h), _ = cv2.getTextSize(stats_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+                (w, h), *_ = cv2.getTextSize(stats_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
                 text_x = 70
                 text_y = frame_height - 120
                 cv2.rectangle(annotated_frame, (text_x - 5, text_y - h - 5), (text_x + w + 5, text_y + 5), (0,0,0), -1) # Background
                 cv2.putText(annotated_frame, stats_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2) # White text
             except Exception as text_e:
                  print(f"Warning: Error drawing text overlay: {text_e}")
-
-
             # 8. Timing, Output, and Preview
             processing_time = time.time() - start_time
             processing_times.append(processing_time)
-
             out.write(annotated_frame) # Write the annotated frame
-
             if show_preview:
                 cv2.imshow(WINDOW_NAME_VIEW, annotated_frame)
                 # Use calculated wait_time, allow quitting with 'q'
                 if cv2.waitKey(wait_time) & 0xFF == ord('q'):
                     print("\nPreview quit by user.")
                     break
-
             # Print progress periodically
             if total_frames > 0 and frame_count % 50 == 0:
                  progress = frame_count / total_frames * 100
@@ -310,8 +281,6 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
                   avg_proc_time_so_far = sum(processing_times) / len(processing_times) if processing_times else 0
                   current_fps = 1.0 / avg_proc_time_so_far if avg_proc_time_so_far > 0 else 0
                   print(f"\rProcessed {frame_count} frames - Current Proc FPS: {current_fps:.2f}", end="")
-
-
     finally:
         # Ensure final newline after progress printing
         print()
@@ -323,14 +292,12 @@ def process_video(input_path, output_path, show_preview, final_rois_np, args):
              cv2.waitKey(1)
              cv2.destroyAllWindows()
              cv2.waitKey(1) # Extra waitKey can sometimes help ensure window closes
-
     # Print final summary statistics
     print("\n--- Processing Summary ---")
     if frame_count > 0 and processing_times: # Ensure times were recorded
         avg_processing_time = sum(processing_times) / frame_count
         avg_fps = 1.0 / avg_processing_time if avg_processing_time > 0 else 0
         unattended_percentage = (unattended_event_frames / frame_count) * 100
-
         print(f"Total frames processed : {frame_count}")
         print(f"Avg. processing time : {avg_processing_time:.4f} sec/frame")
         print(f"Avg. processing speed: {avg_fps:.2f} FPS")
